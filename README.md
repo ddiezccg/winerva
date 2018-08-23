@@ -1,7 +1,7 @@
 # winerva
 
 
-**Helping to bring the management of stand-alone MS Windows machines under your control! And at no cost!**
+**Helping to bring the management of stand-alone MS Windows machines under your control!**
 
 
 ## TOC
