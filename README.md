@@ -11,6 +11,7 @@
     * [Why Ansible?](#why-ansible)
     * [Which operating systems?](#which-operating-systems)
     * [What does it do?](#what-does-it-do)
+    * [Why the local Administrator account?](#why-the-local-administrator-account)
     * [How do I use it?](#how-do-i-use-it)
 * [Configuration](#configuration)
 
@@ -43,10 +44,15 @@ The script carries out the following tasks:
 * Ensures [Chocolatey](https://chocolatey.org) is installed.
 * Upgrades .NET to the latest available version.
 * Upgrades PowerShell to the latest available version.
-* Ensures that [Carbon](https://get-carbon.org) for PowerShell is installed.
+* Ensures that [Carbon](http://get-carbon.org) for PowerShell is installed.
 * Ensures the specified user account is present.
 * Ensures that that user account is a member of the local `Administrators` group.
 * Adds (if missing) the computer's name to an inventory file, which can later be used by Ansible.
+
+
+### Why the local Administrator account?
+
+Ansible will use this account when connecting to each target machine. Administrator-level access is required for a lot of configuration actions and application deployments, so it just makes sense. That being said, the credentials should be kept in a safe place (meaning, **not** copied to the target machine), and the password should be [lengthy](https://stormpath.com/blog/5-myths-password-security).
 
 
 ### How do I use it?
