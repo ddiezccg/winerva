@@ -42,7 +42,6 @@ The list of currently supported operating systems are:
 The script carries out the following tasks:
 
 * Ensures [Chocolatey](https://chocolatey.org) is installed.
-* Upgrades .NET to the latest available version.
 * Upgrades PowerShell to the latest available version.
 * Ensures that [Carbon](http://get-carbon.org) for PowerShell is installed.
 * Ensures the specified user account is present.

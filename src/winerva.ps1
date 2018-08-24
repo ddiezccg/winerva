@@ -1,4 +1,4 @@
-#Requires -Version 5
+#Requires -Version 2
 #Requires -RunAsAdministrator
 
 # .SYNOPSIS
@@ -97,6 +97,17 @@ Try {
 
     refreshenv
 
+    ##### UPDATE TO PS 5
+    If ($PSVersionTable.PSVersion.Major -lt 5) {
+        Write-LogMessage "Ensuring latest version of PowerShell is installed..."
+        choco install -y powershell
+        Write-LogMessage "done!"
+
+        Write-LogMessage "********* MACHINE WILL NOW REBOOT *********"
+        Write-LogMessage "Re-start this script after the machine has come back up."
+        shutdown /r /t 0
+    }
+
     ##### CARBON
     Write-LogMessage "Ensuring PS Carbon is installed..."
 
@@ -147,15 +158,20 @@ Try {
     }
     Else {
         Write-LogMessage "not found, adding..."
-        Add-Content -Path $PathToInventoryFile -Value $Env:ComputerName
-        Write-LogMessage "...done!"
+        Add-Content -Path $PathToInventoryFile -Value "$([System.Environment]::NewLine)$Env:ComputerName"
+        Write-LogMessage "done!"
     }
+
+    # The following was adapted from https://stackoverflow.com/a/11002660
+    Write-LogMessage "Removing extraneous blank lines from inventory file..."
+    (Get-Content $PathToInventoryFile) | ? { -not [System.String]::IsNullOrWhiteSpace($_) } | Set-Content $PathToInventoryFile
+    Write-LogMessage "done!"
 }
 Catch {
-    Write-LogMessage "*************"
-    Write-LogMessage "*** ERROR: " $Error[0].Exception.Message
-    Write-LogMessage "*** ERROR: " $Error[0].InvocationInfo.PositionMessage
-    Write-LogMessage "*************"
+    Write-LogMessage "****** ERROR ******"
+    Write-LogMessage $_.Exception.Message
+    Write-LogMessage $_.InvocationInfo.PositionMessage
+    Write-LogMessage "*******************"
     $Host.SetShouldExit(1)
 }
 Finally {
