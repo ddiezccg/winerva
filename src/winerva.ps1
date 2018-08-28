@@ -31,12 +31,17 @@
 
 # The following attribute enables this script to implement common parameters.
 # See https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_commonparameters
+#
 [CmdletBinding()]
 Param()
 
-# https://blogs.technet.microsoft.com/heyscriptingguy/2014/12/03/enforce-better-script-practices-by-using-set-strictmode
+# https://blogs.technet.microsoft.com/heyscriptingguy/2014/12/03/enforce-better-script-practices-by-using-set-strictmode/
+#
 Set-StrictMode -Version Latest
 
+# Displays a message on the console. Encapsulating this in a function provides
+# an easy way to ensure that debug messages will stand out from other output.
+#
 Function Write-LogMessage {
     Param(
         [System.String]$msg
@@ -45,28 +50,25 @@ Function Write-LogMessage {
     Write-Host "[LOG]  $msg"
 }
 
+# Checks to see if the current execution context has Administrative privileges.
+# Returns a boolean value.
+#
 Function Verify-ElevatedShell {
-    Write-LogMessage "Ensuring this script is running in an elevated shell..."
-
     # Adapted from https://blogs.msdn.microsoft.com/virtual_pc_guy/2010/09/23/a-self-elevating-powershell-script/
-    $MyWindowsPrincipal = New-Object System.Security.Principal.WindowsPrincipal([System.Security.Principal.WindowsIdentity]::GetCurrent())
-    $AdminRole = [System.Security.Principal.WindowsBuiltInRole]::Administrator
-
-    If (-not $MyWindowsPrincipal.IsInRole($AdminRole)) {
-      Write-LogMessage "failed. This script requires administrative privileges!"
-      $Host.SetShouldExit(1)
-      Exit
-    }
-
-    Write-LogMessage "done!"
+    $CurrentUser = New-Object System.Security.Principal.WindowsPrincipal([System.Security.Principal.WindowsIdentity]::GetCurrent())
+    Return $CurrentUser.IsInRole([System.Security.Principal.WindowsBuiltInRole]::Administrator)
 }
 
+# Initiates a restart sequence.
+#
 Function Restart-Computer {
     Write-LogMessage "********* MACHINE WILL NOW REBOOT IN 15 SECONDS *********"
     Write-LogMessage "Re-start this script after the machine has come back up."
     shutdown /r /t 15
 }
 
+# Performs general clean-up immediately preceding the end of this script.
+#
 Function PrepareFor-Exit {
     ##### CLEAN UP
     Write-LogMessage "Removing downloaded scripts..."
@@ -79,10 +81,12 @@ Function PrepareFor-Exit {
 
     Write-LogMessage "END OF LINE"
 
-    # If this script was launched via a "double-click", keep the console
-    # window open so that the user has a chance to review any output
-    # before it suddenly disappears.
-    # Adapted from http://blog.danskingdom.com/allow-others-to-run-your-powershell-scripts-from-a-batch-file-they-will-love-you-for-it/
+    # If this script was launched via a "double-click", then keep the console
+    # window open so that the user has a chance to review any output before it
+    # suddenly disappears.
+    # Adapted from
+    # http://blog.danskingdom.com/allow-others-to-run-your-powershell-scripts-from-a-batch-file-they-will-love-you-for-it/
+    #
     Write-Host "Press any key to exit..."
     $Host.UI.RawUI.FlushInputBuffer()
     $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyUp") > $null
@@ -116,15 +120,30 @@ Write-LogMessage "...done!"
 ##### BEGIN MAIN ALGORITHM
 
 Try {
+    ##### CHECK PREREQUISITES
+
+    Write-LogMessage "Checking prerequisites..."
+
+    If (Verify-ElevatedShell) {
+        Write-LogMessage "  * running in elevated shell"
+    }
+    Else {
+        Throw "This script requires administrative privileges!"
+    }
+
+    Write-LogMessage "...done!"
+
     ##### SYSTEM INFORMATION
 
     # A boolean value indicating if this script should attempt to upgrade
     # Chocolatey. This should only be true if Chocolatey is already installed.
+    #
     $UpgradeChocolatey = $false
 
     # A string value indicating the version of Windows. Refer to
     # https://en.wikipedia.org/wiki/List_of_Microsoft_Windows_versions
     # for more information.
+    #
     $WindowsVersion = (Get-WmiObject -Class Win32_OperatingSystem).Version
 
     # A string value indicating the latest version of .NET that appears to be
