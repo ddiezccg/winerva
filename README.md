@@ -61,9 +61,11 @@ Ansible will use this account when connecting to each target machine. Administra
 
 1. Download the contents of the `src/` folder to removable media (such as a USB flash drive).
 2. Ensure that the contents of the configuration file are correct for the target machine. _You'll need to change the credentials_; if you like, you can use an existing account. The script will automatically add it to the local Administrators group, if it isn't there already.
-3. Attach the removable media, and execute `run.cmd`.
+3. Attach the removable media to the target machine, and execute `run.cmd`. This will [automatically launch the script](http://blog.danskingdom.com/allow-others-to-run-your-powershell-scripts-from-a-batch-file-they-will-love-you-for-it/) in an elevated shell, and bypass the current execution policy setting, in case it is too restrictive.
 
-**This is script is safe to run more than once on the same machine.**
+**Note #1: Depending on which Windows components are already present on the target machine, one or more reboots may be required during the installation process. After each reboot, repeat step #3 above until you see the message "INSTALLATION COMPLETE" in the console window.**
+
+**Note #2: This is script is safe to run more than once on the same machine.**
 
 
 ## Configuration

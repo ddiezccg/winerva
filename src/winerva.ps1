@@ -54,7 +54,39 @@ Function Write-LogMessage {
     Write-Host "[LOG]  $msg"
 }
 
+
+# Checks to see if the specified version number meets the minimum requirement
+# for this script. Refer to
+# https://en.wikipedia.org/wiki/List_of_Microsoft_Windows_versions
+#
+# Returns a boolean value.
+#
+Function Verify-MinimumWindowsVersion {
+    Param(
+        [string]$ver
+    )
+
+    [array]$vers = $ver.split(".")
+
+    If ([int]$vers[0] -gt 6) {
+        Return $true
+    }
+
+    If ([int]$vers[0] -eq 6) {
+        If ([int]$vers[1] -gt 1) {
+            Return $true
+        }
+
+        If ([int]$vers[1] -eq 1 -and [int]$vers[2] -ge 7601) {
+            Return $true
+        }
+    }
+
+    Return $false
+}
+
 # Checks to see if the current execution context has Administrative privileges.
+#
 # Returns a boolean value.
 #
 Function Verify-ElevatedShell {
@@ -86,7 +118,7 @@ Function Restart-Computer {
 Function PrepareFor-Exit {
     ##### CLEAN UP
     Write-LogMessage "Removing downloaded scripts..."
-    Get-ChildItem $DownloadTo -Include "__winerva__*.ps1" -Recurse | % { Remove-Item $_.Fullname }
+    Get-ChildItem $SCRIPT_DATA.DownloadTo -Include "__winerva__*.ps1" -Recurse | % { Remove-Item $_.Fullname }
     Write-LogMessage "done!"
 
     Write-LogMessage "Restoring previous value of ErrorActionPreference..."
@@ -109,6 +141,12 @@ Function PrepareFor-Exit {
 ##### DEFINE GLOBAL CONSTANTS #####
 ###################################
 
+# The official "version" number reported by Windows 7 with Service Pack 1
+# installed. Obtained from
+# https://en.wikipedia.org/wiki/List_of_Microsoft_Windows_versions
+#
+[string]$CONST_WIN7SP1_VERSION_ID = "6.1.7601"
+
 # The value of $ErrorActionPreference before it is changed by this script. It
 # will be reset just before the script exits.
 #
@@ -130,14 +168,66 @@ Write-LogMessage "...done!"
 
 Try {
     Write-LogMessage "++++++ BEGIN INSTALLATION ++++++"
-    Write-LogMessage "++++++ +++++ v1.2.0 +++++ ++++++"
+    Write-LogMessage "++++++++ WINERVA v1.2.0 ++++++++"
 
-    ##### GET DOWNLOAD FOLDER FOR CURRENT USER
-    Write-LogMessage "Getting download folder..."
+    # `$PSScriptRoot` was only added as a built-in special variable starting
+    # with PS version 3.
+    #
+    Try {
+        If ([System.String]::IsNullOrEmpty($PSScriptRoot)) {
+            # Adapted from https://stackoverflow.com/a/3667376
+            $PSScriptRoot = (Split-Path $MyInvocation.MyCommand.Path -Parent)
+        }
+    }
+    Catch {
+        $PSScriptRoot = (Split-Path $MyInvocation.MyCommand.Path -Parent)
+    }
 
-    $DownloadTo = (Join-Path $Home "Downloads")
-    Write-LogMessage $DownloadTo
+    ##### GATHER SYSTEM INFORMATION
 
+    # This hash table contains values that are accessible from the "global"
+    # scope. (Yes, I know global variables are a Bad Thing, but it is
+    # convenient for such a small scale project.)
+    #
+    [PSCustomObject]$SCRIPT_DATA = [PSCustomObject]@{
+        # Self-explanatory. The hostname is added to the inventory file for
+        # future use by Ansible playbooks.
+        #
+        Hostname = $Env:ComputerName;
+
+        # The location on disk where downloaded scripts will be saved.
+        # When the script is about to exit, these will be deleted.
+        #
+        DownloadTo = (Join-Path $Home "Downloads");
+
+        # The currently installed version of Windows.
+        #
+        WinVersion = (Get-WmiObject -Class Win32_OperatingSystem).Version;
+
+        # The latest version of .NET that appears to be installed on this
+        # machine. Based on https://stackoverflow.com/a/1565454
+        #
+        NETVersion = (Get-ChildItem 'HKLM:\SOFTWARE\Microsoft\NET Framework Setup\NDP' -Recurse | `
+                      Get-ItemProperty -Name Version,Release -ErrorAction SilentlyContinue | `
+                      ? { $_.PSChildName -Match '^(?!S)\p{L}'} | `
+                      Sort-Object -Property Version | `
+                      Select-Object -Last 1).Version;
+
+        # The major version number for PowerShell.
+        #
+        PSMajorVersion = $PSVersionTable.PSVersion.Major;
+
+        # The absolute path to the inventory file (which contains all of the
+        # host names).
+        #
+        PathToInventoryFile = (Join-Path $PSScriptRoot "hostnames");
+    }
+
+    # Echo the collected data back out to the console. This should help with
+    # debugging problems in the field.
+    #
+    Write-LogMessage "Printing script data..."
+    Format-List -InputObject $SCRIPT_DATA
     Write-LogMessage "...done!"
 
     ##### CHECK PREREQUISITES
@@ -151,38 +241,20 @@ Try {
         Throw "This script requires administrative privileges!"
     }
 
+    If (Verify-MinimumWindowsVersion $SCRIPT_DATA.WinVersion) {
+        Write-LogMessage "  * at least Win7SP1"
+    }
+    Else {
+        Throw "This script can only be run on Windows 7 SP1 or later."
+    }
+
     Write-LogMessage "...done!"
 
-    ##### SYSTEM INFORMATION
+    ##### INSTALL CHOCOLATEY
 
-    # A boolean value indicating if this script should attempt to upgrade
-    # Chocolatey. This should only be true if Chocolatey is already installed.
-    #
-    $UpgradeChocolatey = $false
-
-    # A string value indicating the version of Windows. Refer to
-    # https://en.wikipedia.org/wiki/List_of_Microsoft_Windows_versions
-    # for more information.
-    #
-    $WindowsVersion = (Get-WmiObject -Class Win32_OperatingSystem).Version
-
-    # A string value indicating the latest version of .NET that appears to be
-    # installed on this machine. Based on https://stackoverflow.com/a/1565454
-    $LatestVersionOfNET = (Get-ChildItem 'HKLM:\SOFTWARE\Microsoft\NET Framework Setup\NDP' -Recurse | `
-                           Get-ItemProperty -Name Version,Release -ErrorAction SilentlyContinue | `
-                           ? { $_.PSChildName -Match '^(?!S)\p{L}'} | `
-                           Sort-Object -Property Version | `
-                           Select-Object -Last 1).Version
-
-    # A object containing the major and minor version numbers for PowerShell.
-    $PowerShellVersion = $PSVersionTable.PSVersion
-
-    Write-LogMessage "Windows version is $WindowsVersion"
-    Write-LogMessage "Latest version of .NET is $LatestVersionOfNET"
-    Write-LogMessage "PowerShell version is $($PowerShellVersion.Major).$($PowerShellVersion.Minor)"
-
-    ##### CHOCOLATEY
     Write-LogMessage "Checking for Chocolatey..."
+    [boolean]$UpgradeChocolatey = $false
+
     Try {
         Get-Command "choco.exe" | Out-Null
         Write-LogMessage "...found."
@@ -191,7 +263,7 @@ Try {
     Catch {
         Write-LogMessage "...not found. Downloading installation script..."
 
-        [string]$PathToChocolateyScript = (Join-Path $DownloadTo "__winerva__InstallChocolatey.ps1")
+        [string]$PathToChocolateyScript = (Join-Path $SCRIPT_DATA.DownloadTo "__winerva__InstallChocolatey.ps1")
         Download-File "https://chocolatey.org/install.ps1" $PathToChocolateyScript
 
         Write-LogMessage "...done!"
@@ -202,13 +274,12 @@ Try {
 
         # On Windows 7, the machine must be restarted after installing
         # Chocolatey.
-        If ($WindowsVersion -lt "6.2" -And $LatestVersionOfNET -lt "4.0") {
+        #
+        If ($SCRIPT_DATA.WinVersion -eq $CONST_WIN7SP1_VERSION_ID) {
             Restart-Computer
             PrepareFor-Exit
             Exit
         }
-
-        $UpgradeChocolatey = $false
     }
 
     If ($UpgradeChocolatey) {
@@ -221,10 +292,10 @@ Try {
 
     ##### UPDATE .NET
 
-    If ($LatestVersionOfNET -lt "4.5") {
+    If ($SCRIPT_DATA.NETVersion -lt "4.5") {
         Write-LogMessage "Installing .NET 4.5..."
         choco install -y dotnet4.5
-        Write-LogMessage "done!"
+        Write-LogMessage "...done!"
 
         Restart-Computer
         PrepareFor-Exit
@@ -233,7 +304,7 @@ Try {
 
     ##### UPDATE POWERSHELL
 
-    If ($PowerShellVersion.Major -lt 5) {
+    If ($SCRIPT_DATA.PSMajorVersion -lt 5) {
         Write-LogMessage "Ensuring latest version of PowerShell is installed..."
         choco install -y powershell
         Write-LogMessage "...done!"
@@ -244,6 +315,7 @@ Try {
     }
 
     ##### CARBON
+
     Write-LogMessage "Ensuring PS Carbon is installed..."
 
     choco install -y carbon
@@ -282,7 +354,7 @@ Try {
     ##### ENABLE WINRM FOR ANSIBLE
     Write-LogMessage "Downloading script to enable WinRM for Ansible..."
 
-    [string]$PathToAnsibleScript = (Join-Path $DownloadTo "__winerva__ConfigureRemotingForAnsible.ps1")
+    [string]$PathToAnsibleScript = (Join-Path $SCRIPT_DATA.DownloadTo "__winerva__ConfigureRemotingForAnsible.ps1")
     Download-File "https://raw.githubusercontent.com/ansible/ansible/devel/examples/scripts/ConfigureRemotingForAnsible.ps1" $PathToAnsibleScript
 
     Write-LogMessage "...done!"
@@ -292,32 +364,31 @@ Try {
     Write-LogMessage "...done!"
 
     ##### ADD HOSTNAME TO INVENTORY FILE
-    Write-LogMessage "Checking if computer is already included in inventory for Ansible..."
 
-    $PathToInventoryFile = (Join-Path $PSScriptRoot "hostnames")
+    Write-LogMessage "Checking if computer name is already included in inventory for Ansible..."
 
     Try {
-        $Inventory = (Get-Content -Path $PathToInventoryFile)
+        $Inventory = (Get-Content -Path $SCRIPT_DATA.PathToInventoryFile)
     }
     Catch {
         $Inventory = ""
     }
 
-    If ($Inventory.Contains($Env:ComputerName)) {
-        Write-LogMessage "present."
+    If ($Inventory.Contains($SCRIPT_DATA.Hostname)) {
+        Write-LogMessage "...present."
     }
     Else {
         Write-LogMessage "not found, adding..."
-        Add-Content -Path $PathToInventoryFile -Value "$([System.Environment]::NewLine)$Env:ComputerName"
-        Write-LogMessage "done!"
+        Add-Content -Path $SCRIPT_DATA.PathToInventoryFile -Value "$([System.Environment]::NewLine)$($SCRIPT_DATA.Hostname)"
+        Write-LogMessage "...done!"
     }
 
     # The following was adapted from https://stackoverflow.com/a/11002660
     Write-LogMessage "Removing extraneous blank lines from inventory file..."
-    (Get-Content $PathToInventoryFile) | ? { -not [System.String]::IsNullOrWhiteSpace($_) } | Set-Content $PathToInventoryFile
-    Write-LogMessage "done!"
+    (Get-Content $SCRIPT_DATA.PathToInventoryFile) | ? { -not [System.String]::IsNullOrWhiteSpace($_) } | Set-Content $SCRIPT_DATA.PathToInventoryFile
+    Write-LogMessage "...done!"
 
-    Write-LogMessage "++++++ PROCESS COMPLETE ++++++"
+    Write-LogMessage "+++++ INSTALLATION COMPLETE ++++"
 }
 Catch {
     Write-LogMessage "****** ERROR ******"
