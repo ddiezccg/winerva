@@ -72,7 +72,7 @@ Function Restart-Computer {
 Function PrepareFor-Exit {
     ##### CLEAN UP
     Write-LogMessage "Removing downloaded scripts..."
-    Get-ChildItem $DownloadTo -Include "__winerva__*.ps1" -Recurse | ForEach ($_) { Remove-Item $_.Fullname }
+    Get-ChildItem $DownloadTo -Include "__winerva__*.ps1" -Recurse | % { Remove-Item $_.Fullname }
     Write-LogMessage "done!"
 
     Write-LogMessage "Restoring previous value of ErrorActionPreference..."
@@ -106,8 +106,6 @@ $ErrorActionPreference = "Stop"
 
 Write-LogMessage "...done!"
 
-##### ENSURE RUNNING IN ELEVATED SHELL
-Verify-ElevatedShell
 
 ##### GET DOWNLOAD FOLDER FOR CURRENT USER
 Write-LogMessage "Getting download folder..."
