@@ -36,6 +36,7 @@ The list of currently supported operating systems are:
 
 * MS Windows 10 (as of v1.0.0)
 * MS Windows 8.1 (as of v1.1.0)
+* MS Windows 7 SP1 (as of v.1.2.0)
 
 
 ### What does it do?
@@ -43,7 +44,7 @@ The list of currently supported operating systems are:
 The script carries out the following tasks:
 
 * Ensures [Chocolatey](https://chocolatey.org) is installed.
-* Upgrades .NET to version 4.5 (latest patch).
+* Upgrades .NET to version 4.5 (latest available patch).
 * Upgrades PowerShell to the latest available version.
 * Ensures that [Carbon](http://get-carbon.org) for PowerShell is installed.
 * Ensures the specified user account is present.

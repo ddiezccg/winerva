@@ -34,6 +34,9 @@
 [CmdletBinding()]
 Param()
 
+# https://blogs.technet.microsoft.com/heyscriptingguy/2014/12/03/enforce-better-script-practices-by-using-set-strictmode
+Set-StrictMode -Version Latest
+
 Function Write-LogMessage {
     Param(
         [System.String]$msg
