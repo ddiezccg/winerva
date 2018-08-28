@@ -39,12 +39,16 @@ Param()
 #
 Set-StrictMode -Version Latest
 
+###################################
+#####     DEFINE FUNCTIONS    #####
+###################################
+
 # Displays a message on the console. Encapsulating this in a function provides
 # an easy way to ensure that debug messages will stand out from other output.
 #
 Function Write-LogMessage {
     Param(
-        [System.String]$msg
+        [string]$msg
     )
 
     Write-Host "[LOG]  $msg"
@@ -59,12 +63,22 @@ Function Verify-ElevatedShell {
     Return $CurrentUser.IsInRole([System.Security.Principal.WindowsBuiltInRole]::Administrator)
 }
 
+# Downloads the requested URL, and saves the file to the specified location.
+#
+Function Download-File {
+    Param(
+        [string]$url,
+        [string]$dest
+    )
+    (New-Object System.Net.WebClient).DownloadFile($url, $dest)
+}
+
 # Initiates a restart sequence.
 #
 Function Restart-Computer {
-    Write-LogMessage "********* MACHINE WILL NOW REBOOT IN 15 SECONDS *********"
-    Write-LogMessage "Re-start this script after the machine has come back up."
-    shutdown /r /t 15
+    Write-LogMessage "********* MACHINE WILL NOW REBOOT IN 30 SECONDS *********"
+    Write-LogMessage "Re-run this script after the machine has come back up."
+    shutdown /r /t 30
 }
 
 # Performs general clean-up immediately preceding the end of this script.
@@ -76,15 +90,14 @@ Function PrepareFor-Exit {
     Write-LogMessage "done!"
 
     Write-LogMessage "Restoring previous value of ErrorActionPreference..."
-    $ErrorActionPreference = $PrevErrorActionPref
-    Write-LogMessage "done!"
+    $ErrorActionPreference = $CONST_PREV_EAP
+    Write-LogMessage "...done!"
 
     Write-LogMessage "END OF LINE"
 
     # If this script was launched via a "double-click", then keep the console
     # window open so that the user has a chance to review any output before it
-    # suddenly disappears.
-    # Adapted from
+    # suddenly disappears. Adapted from
     # http://blog.danskingdom.com/allow-others-to-run-your-powershell-scripts-from-a-batch-file-they-will-love-you-for-it/
     #
     Write-Host "Press any key to exit..."
@@ -92,32 +105,41 @@ Function PrepareFor-Exit {
     $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyUp") > $null
 }
 
-Write-LogMessage "BEGIN INSTALLATION"
+###################################
+##### DEFINE GLOBAL CONSTANTS #####
+###################################
+
+# The value of $ErrorActionPreference before it is changed by this script. It
+# will be reset just before the script exits.
+#
+[string]$CONST_PREV_EAP = $ErrorActionPreference
+
+###################################
+#####     MAIN ALGORITHM      #####
+###################################
 
 ##### SET ERRORACTIONPREFERENCE
 
 # The reason for setting this value is to ensure that all unhandled
 # exceptions cause the script to throw a terminating error (instead of
 # non-terminating).
+#
 Write-LogMessage "Setting ErrorActionPreference to 'Stop'..."
-
-$PrevErrorActionPref = $ErrorActionPreference
 $ErrorActionPreference = "Stop"
-
 Write-LogMessage "...done!"
-
-
-##### GET DOWNLOAD FOLDER FOR CURRENT USER
-Write-LogMessage "Getting download folder..."
-
-$DownloadTo = (Join-Path $Home "Downloads")
-Write-LogMessage $DownloadTo
-
-Write-LogMessage "...done!"
-
-##### BEGIN MAIN ALGORITHM
 
 Try {
+    Write-LogMessage "++++++ BEGIN INSTALLATION ++++++"
+    Write-LogMessage "++++++ +++++ v1.2.0 +++++ ++++++"
+
+    ##### GET DOWNLOAD FOLDER FOR CURRENT USER
+    Write-LogMessage "Getting download folder..."
+
+    $DownloadTo = (Join-Path $Home "Downloads")
+    Write-LogMessage $DownloadTo
+
+    Write-LogMessage "...done!"
+
     ##### CHECK PREREQUISITES
 
     Write-LogMessage "Checking prerequisites..."
@@ -163,13 +185,15 @@ Try {
     Write-LogMessage "Checking for Chocolatey..."
     Try {
         Get-Command "choco.exe" | Out-Null
-        Write-LogMessage "found."
+        Write-LogMessage "...found."
         $UpgradeChocolatey = $true
     }
     Catch {
-        Write-LogMessage "not found. Downloading installation script..."
-        $PathToChocolateyScript = (Join-Path $DownloadTo "__winerva__InstallChocolatey.ps1")
-        (New-Object System.Net.WebClient).DownloadFile("https://chocolatey.org/install.ps1", $PathToChocolateyScript)
+        Write-LogMessage "...not found. Downloading installation script..."
+
+        [string]$PathToChocolateyScript = (Join-Path $DownloadTo "__winerva__InstallChocolatey.ps1")
+        Download-File "https://chocolatey.org/install.ps1" $PathToChocolateyScript
+
         Write-LogMessage "...done!"
 
         Write-LogMessage "Executing..."
@@ -195,7 +219,7 @@ Try {
 
     refreshenv
 
-    ##### CHECK INSTALLED VERSION OF .NET
+    ##### UPDATE .NET
 
     If ($LatestVersionOfNET -lt "4.5") {
         Write-LogMessage "Installing .NET 4.5..."
@@ -207,11 +231,12 @@ Try {
         Exit
     }
 
-    ##### UPDATE TO PS 5
+    ##### UPDATE POWERSHELL
+
     If ($PowerShellVersion.Major -lt 5) {
         Write-LogMessage "Ensuring latest version of PowerShell is installed..."
         choco install -y powershell
-        Write-LogMessage "done!"
+        Write-LogMessage "...done!"
 
         Restart-Computer
         PrepareFor-Exit
@@ -226,25 +251,40 @@ Try {
 
     Write-LogMessage "...done!"
 
-    ##### INSTALL USER
+    ##### READ LOCAL CONFIG
+
+    Write-LogMessage "Reading local configuration file..."
+    [PSCustomObject]$ConfigData = Import-PowerShellDataFile (Join-Path $PSScriptRoot "config.psd1")
+    Write-LogMessage "...done!"
+
+    ##### CREATE LOCAL USER
+
     Write-LogMessage "Ensuring local user is present..."
 
-    $ConfigData = Import-PowerShellDataFile (Join-Path $PSScriptRoot "config.psd1")
+    [SecureString]$PasswordAsSecureString = ConvertTo-SecureString $ConfigData.LocalAdmin.Password -AsPlainText -Force
+    [PSCredential]$AdminCredentials = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList $ConfigData.LocalAdmin.Username, $PasswordAsSecureString
 
-    $PasswordAsSecureString = ConvertTo-SecureString $ConfigData.LocalAdmin.Password -AsPlainText -Force
-    $LocalAdminCredential = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList $ConfigData.LocalAdmin.Username, $PasswordAsSecureString
-    Install-User -Credential $LocalAdminCredential -Description $ConfigData.Description -UserCannotChangePassword
+    Install-User `
+        -Credential  $AdminCredentials `
+        -Description $ConfigData.LocalAdmin.Description `
+        -UserCannotChangePassword
 
     Write-LogMessage "...done!"
 
     Write-LogMessage "Ensuring local user is added to Administrators group..."
-    Add-GroupMember -Name Administrators -Member $ConfigData.LocalAdmin.Username
+
+    Add-GroupMember `
+        -Name Administrators `
+        -Member $ConfigData.LocalAdmin.Username
+
     Write-LogMessage "...done!"
 
     ##### ENABLE WINRM FOR ANSIBLE
     Write-LogMessage "Downloading script to enable WinRM for Ansible..."
-    $PathToAnsibleScript = (Join-Path $DownloadTo "__winerva__ConfigureRemotingForAnsible.ps1")
-    (New-Object System.Net.WebClient).DownloadFile("https://raw.githubusercontent.com/ansible/ansible/devel/examples/scripts/ConfigureRemotingForAnsible.ps1", $PathToAnsibleScript)
+
+    [string]$PathToAnsibleScript = (Join-Path $DownloadTo "__winerva__ConfigureRemotingForAnsible.ps1")
+    Download-File "https://raw.githubusercontent.com/ansible/ansible/devel/examples/scripts/ConfigureRemotingForAnsible.ps1" $PathToAnsibleScript
+
     Write-LogMessage "...done!"
 
     Write-LogMessage "Executing..."
@@ -284,7 +324,6 @@ Catch {
     Write-LogMessage $_.Exception.Message
     Write-LogMessage $_.InvocationInfo.PositionMessage
     Write-LogMessage "*******************"
-    $Host.SetShouldExit(1)
 }
 Finally {
     PrepareFor-Exit

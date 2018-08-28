@@ -9,7 +9,11 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/) a
 ### Added
 * Support for MS Windows 7 SP1. Note this may require one or more restarts.
 * Script now installs .NET 4.5
-* Verbiage to indicate when the installation process is complete.
+* Script displays verbiage to indicate when the installation process is complete.
+* Script includes version number.
+
+### Fixed
+* When removing downloaded files, script no longer throws an exception.
 
 
 ## [1.1.0] - 2018-08-24
