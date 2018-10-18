@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/) and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
+## [1.2.1] - 2018-10-18
+
+### Fixed
+* The script no longer encounters an error when `hostnames` is empty.
+* Applied style guidelines as per https://poshcode.gitbooks.io/powershell-practice-and-style/.
+* Script can be successfully run inside of PowerShell ISE without throwing unhandled exceptions.
+
+
 ## [1.2.0] - 2018-08-28
 
 ### Added
@@ -25,7 +33,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/) a
 ### Fixed
 * When updating `hostnames`, a new line is added between names.
 * When updating `hostnames`, empty lines are removed.
-* When an exception is thrown, the `Catch` block correctly displays the error information.
+* When an exception is thrown, the `catch` block correctly displays the error information.
 
 
 ## [1.0.0] - 2018-08-23
