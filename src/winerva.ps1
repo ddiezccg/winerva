@@ -399,7 +399,7 @@ try {
     ##### READ LOCAL CONFIG
 
     Write-LogMessage "Reading local configuration file..."
-    [Hashtable]$configData = Import-PowerShellDataFile (Join-Path $PSScriptRoot "config.psd1")
+    [Hashtable]$configData = Import-LocalizedData -FileName config.psd1
     Write-LogMessage "...done!"
 
     ##### CREATE LOCAL USER
